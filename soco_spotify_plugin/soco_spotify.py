@@ -11,7 +11,7 @@ from soco.music_services.accounts import Account
 from soco.data_structures import (DidlResource, DidlAudioItem, DidlAlbum,
                                   to_didl_string, DidlPlaylistContainer)
 from soco.data_structures_entry import from_didl_string
-
+from soco.exceptions import MusicServiceException
 from spotipy import *
 from spotipy.oauth2 import SpotifyOAuth
 
@@ -42,24 +42,18 @@ spotify_sonos = {
 
 
 class SpotifySocoPlugin(SoCoPlugin):
-    def __init__(self, soco, sonos_service_username, sonos_service_type,
-                 spotify_service, spotify_scope,
+    def __init__(self, soco, spotify_service, spotify_scope,
                  spotify_client_id, spotify_client_secret, spotify_redirect_uri):
         super(SpotifySocoPlugin, self).__init__(soco)
 
         if spotify_service not in spotify_services:
-            raise TODO
+            raise MusicServiceException("Unknown spotify service: '%s'" % spotify_service)
+        self.spotify_service = spotify_services[spotify_service]
 
-        account = Account()
-        account.username = sonos_service_username
-        account.service_type = sonos_service_type
-#        self._ms = MusicService('Spotify', account=account)
-
-        self._sp = Spotify(auth_manager=SpotifyOAuth(client_id=spotify_client_id,
+        self.sp = Spotify(auth_manager=SpotifyOAuth(client_id=spotify_client_id,
                                                              client_secret=spotify_client_secret,
                                                              redirect_uri=spotify_redirect_uri,
                                                              scope=spotify_scope))
-        self._spotify_service = spotify_services[spotify_service]
 
 
     @property
@@ -67,8 +61,8 @@ class SpotifySocoPlugin(SoCoPlugin):
         return 'Spotify'
 
 
-    def get_didl_object(self, spotify_title, spotify_id):
-        """Add URI to queue."""
+    def get_uri(self, spotify_title, spotify_id):
+        """Get URI for spotify."""
         match = re.search(r"spotify.*[:/](album|track|playlist)[:/](\w+)", spotify_id)
         if not match:
             return False
@@ -91,6 +85,12 @@ class SpotifySocoPlugin(SoCoPlugin):
             item_title=escape(spotify_title),
             item_id=spotify_sonos[spotify_type]["key"] + encoded_uri,
             item_class=spotify_sonos[spotify_type]["class"],
-            sn=self._spotify_service,
+            sn=self.spotify_service,
         )
-        return from_didl_string(metadata)[0]
+        return [
+            ("InstanceID", 0),
+            ("EnqueuedURI", enqueue_uri),
+            ("EnqueuedURIMetaData", metadata),
+            ("DesiredFirstTrackNumberEnqueued", 0),
+            ("EnqueueAsNext", 0),
+        ]
